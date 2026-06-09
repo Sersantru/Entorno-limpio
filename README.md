@@ -1,3 +1,7 @@
+# PASOS PARA CREAR EL ENTORNO VIRTUAL EN LA JETSON
+
+## Estos pasos son necesarios para este proyecto en concreto si se desea importar ultralytics y easyocr.
+
 Crear entorno virtual con --system-site-packages
 	- python3 -m venv .venv --system-site-packages
 	- source .venv/bin/activate
