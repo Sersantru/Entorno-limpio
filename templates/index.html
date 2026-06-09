@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Inferencia Rápida - Hilos de Tiempo Real</title>
+    <style>
+        body { background-color: #111; text-align: center; color: white; font-family: sans-serif; }
+        #contenedor { position: relative; display: inline-block; margin-top: 20px; width: 1280px; height: 720px; }
+        #video-fondo { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; border: 2px solid #333; }
+        #lienzo { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
+    </style>
+</head>
+<body>
+    <h1>Vídeo directo (8123) + Recuadros IA (8182) hilos sincrónicos</h1>
+    <div id="contenedor">
+        <img id="video-fondo" src="{{ camera_url }}" data-base-url="{{ camera_url }}">
+        <canvas id="lienzo" width="1280" height="720"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('video-fondo');
+        const canvas = document.getElementById('lienzo');
+        const ctx = canvas.getContext('2d');
+
+        // Leemos la URL limpia desde el HTML. Cursor ya no verá llaves raras ni protestará
+        const BASE_URL_CAMARA = video.dataset.baseUrl;
+        let matriculas = [];
+
+        // Conservamos la función por si necesitáis un botón de emergencia para resetear el flujo
+        function recolectarCamara() {
+            console.log("Forzando refresco de flujo de la camara");
+            video.src = BASE_URL_CAMARA + "?t=" + new Date().getTime();
+        }
+
+        function dibujarRecuadros() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 4;
+            ctx.font = 'bold 20px Arial';
+            ctx.fillStyle = '#00ff00';
+
+            matriculas.forEach(box => {
+                
+                // Validación de seguridad por si llega un frame corrupto
+                if (!box || box.length < 4) return;
+
+                // Extraemos los datos de forma posicional segura para evitar errores de undefined
+                const x1 = box[0];
+                const y1 = box[1];
+                const x2 = box[2];
+                const y2 = box[3];
+                const conf = box[4] !== undefined ? box[4] : 0;
+                const track_id = box[5] !== undefined ? box[5] : null;
+                const texto_ocr = box[6] !== undefined ? box[6] : "";
+                // Dibujamos usando la anchura (x2 - x1) y la altura (y2 - y1)
+                ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+                // Si el trackId es válido (no es null), lo pintamos; si no, ponemos un guion
+                const idTexto = track_id != null ? `ID: ${track_id}` : "ID: --";
+                // const porcentaje = (conf * 100).toFixed(0);
+                // LÓGICA DE DETECCIÓN: 
+                // Si texto_ocr contiene algo (ya sea la matrícula leída o "NO LEÍDO"), lo pintamos directamente.
+                // Si viene vacío (""), significa que EasyOCR aún está procesando el recorte en su hilo, 
+                // por lo que mostramos temporalmente el porcentaje de confianza de YOLO.
+                const etiqueta = texto_ocr ? `${idTexto} [${texto_ocr}]` : `${idTexto} [${(conf * 100).toFixed(0)}%]`;
+                // Pintamos la etiqueta encima del recuadro
+                ctx.fillText(etiqueta, x1, y1 - 10);
+            });
+            requestAnimationFrame(dibujarRecuadros);
+        }
+
+        async function pedirCoordenadas() {
+            try {
+                const respuesta = await fetch('/coordenadas');
+                if (respuesta.ok) {
+                    matriculas = await respuesta.json();
+                }
+            } catch (error) {
+                console.error("Error obteniendo coordenadas:", error);
+            }
+            setTimeout(pedirCoordenadas, 30);
+        }
+
+        // COMENTADO: Si es streaming MJPEG en tiempo real, reactivar esto provoca micro-cortes cada 3 segundos.
+        // setInterval(recolectarCamara, 3000);
+
+        // Arrancamos los bucles asíncronos
+        pedirCoordenadas();
+        dibujarRecuadros();
+    </script>
+</body>
+</html>
