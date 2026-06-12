@@ -7,7 +7,9 @@ from datetime import datetime
 import threading
 import time
 import queue
+import multiprocessing
 import easyocr
+
 
 # --- PARCHE DE COMPATIBILIDAD NUMPY ---
 import numpy as np
@@ -89,7 +91,7 @@ def bucle_inferencia():
                             if recorte.size > 0:
                                 try:
                                     # Metemos a la cola el ID y su recorte sin bloquear el bucle de la IA
-                                    cola_ocr.put_nowait((track_id, recorte))
+                                    cola_ocr.put_nowait((track_id, recorte, conf))
                                     ids_en_proceso_o_leidos.add(track_id)
                                     print(f"[IA] Matrícula con ID {track_id} enviada a la cola de OCR.")
                                 except queue.Full:
@@ -111,6 +113,32 @@ def bucle_inferencia():
             print(f"[ERROR CRÍTICO EN IA] El hilo de inferencia ha reventado: {e}")
             time.sleep(1)
 
+# def EscrituraTXT():
+#     while True:
+
+#         try:
+#             track, texto = resultados_ocr.get()
+
+#             with open("resultados.txt", "a") as f:
+                
+#                     # Obtener la hora actual
+#                     hora_actual = datetime.now()
+
+#                     # Formatear la hora en formato 24 horas
+#                     formato_24h = hora_actual.strftime("%H:%M:%S")
+#                     print("Hora en formato 24h:", formato_24h)
+#                     f.write(f"{formato_24h}: {track}: {texto}\n")
+#             print("[IA] Resultados escritos en resultados.txt")
+
+#         except Exception as e:
+#             print(f"")
+#             time.sleep(0.05)
+#         #     print(f"[ERROR EN ESCRITURA TXT]: {e}")
+#         #     time.sleep(1)
+
+
+
+
 def bucle_ocr():
     """Hilo 3: Consumidor de recortes para aplicar el OCR sin penalizar los FPS de la IA"""
     global resultados_ocr
@@ -123,7 +151,7 @@ def bucle_ocr():
     while True:
         try:
             # Este método se queda esperando (bloqueado sin consumir CPU) hasta que entre un recorte
-            track_id, recorte_matricula = cola_ocr.get()
+            track_id, recorte_matricula, conf = cola_ocr.get()
             
             print(f"[OCR] Procesando lectura para el ID: {track_id}...")
             
@@ -144,6 +172,22 @@ def bucle_ocr():
             print(f"[OCR] Éxito ID {track_id} -> {texto_detectado}")
             cola_ocr.task_done()
 
+            if conf > 0.55:
+                # Escribimos el resultado en el archivo resultados.txt
+                with open("resultados.json", "a") as f:
+
+                    # Obtener la hora actual
+                    hora_actual = datetime.now()
+                    # Formatear la hora en formato 24 horas
+                    formato_24h = hora_actual.strftime("%H:%M:%S")
+                    fecha_actual = hora_actual.strftime("%d/%m/%Y")
+                    print("Hora en formato 24h:", formato_24h)
+                    f.write(f"{fecha_actual}: {formato_24h}: {track_id}: {texto_detectado}\n")
+
+                print(f"[IA] Resultados escritos en resultados.json")
+            else:
+                print(f"[OCR] Fallo ID {track_id} -> {texto_detectado}")
+
         except Exception as e:
             print(f"[ERROR EN OCURRENCIA OCR]: {e}")
             time.sleep(0.5)
@@ -163,5 +207,7 @@ if __name__ == "__main__":
     hilo_cam = threading.Thread(target=bucle_lectura_camara, daemon=True).start()
     hilo_ia = threading.Thread(target=bucle_inferencia, daemon=True).start()
     hilo_ocr = threading.Thread(target=bucle_ocr, daemon=True).start()
+
+    # hilo_escritura = threading.Thread(target=EscrituraTXT, daemon=True).start()
 
     app.run(host='0.0.0.0', port=8182, threaded=True)

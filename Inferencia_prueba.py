@@ -17,6 +17,7 @@ if not hasattr(np, 'bool'):
 app = Flask(__name__)
 
 CAMERA_URL = "http://192.168.150.244:8123/video"
+# MODEL_PATH = Path(__file__).resolve().parent / "modelo-detector-matricula.pt"
 MODEL_PATH = Path(__file__).resolve().parent / "modelo-detector-matricula.engine"
 
 lock = threading.Lock()
@@ -111,6 +112,22 @@ def bucle_inferencia():
             print(f"[ERROR CRÍTICO EN IA] El hilo de inferencia ha reventado: {e}")
             time.sleep(1)
 
+# def EscrituraTXT():
+#     with open("resultados.txt", "a") as f:
+#         for track_id, texto_ocr in resultados_ocr.items():
+#             # Obtener la hora actual
+#             hora_actual = datetime.now()
+
+#             # Formatear la hora en formato 24 horas
+#             formato_24h = hora_actual.strftime("%H:%M:%S")
+#             print("Hora en formato 24h:", formato_24h)
+#             f.write(f"{formato_24h}: {track_id}: {texto_ocr}\n")
+#     print("[IA] Resultados escritos en resultados.txt")
+
+#     time.sleep(1)
+
+
+
 def bucle_ocr():
     """Hilo 3: Consumidor de recortes para aplicar el OCR sin penalizar los FPS de la IA"""
     global resultados_ocr
@@ -160,8 +177,16 @@ def coordenadas():
     return jsonify(cajas_actuales)
 
 if __name__ == "__main__":
-    hilo_cam = threading.Thread(target=bucle_lectura_camara, daemon=True).start()
-    hilo_ia = threading.Thread(target=bucle_inferencia, daemon=True).start()
-    hilo_ocr = threading.Thread(target=bucle_ocr, daemon=True).start()
+    hilo_cam = threading.Thread(target=bucle_lectura_camara, daemon=True)
+    hilo_cam.start()
+
+    hilo_ia = threading.Thread(target=bucle_inferencia, daemon=True)
+    hilo_ia.start()
+
+    hilo_ocr = threading.Thread(target=bucle_ocr, daemon=True)
+    hilo_ocr.start()
+
+    # hilo_escritura = threading.Thread(target=EscrituraTXT, daemon=True)
+    # hilo_escritura.start()
 
     app.run(host='0.0.0.0', port=8182, threaded=True)
